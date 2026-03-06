@@ -3,44 +3,42 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 export const generateListFromRecipeService = async (userId: string, recipeId: number) => {
-  const recipe = await prisma.recipes.findUnique({ 
+  const recipe = await prisma.recipes.findUnique({
     where: { id: recipeId },
-    include: { 
-      recipe_ingredients: { 
-        include: { ingredients: true } 
-      } 
-    }
+    include: { recipe_ingredients: { include: { ingredients: true } } }
   });
 
-  if (!recipe) throw new Error('Receta no encontrada');
+  if (!recipe) throw new Error('La receta solicitada no existe en nuestro catálogo.');
 
   const userInventory = await prisma.inventory.findMany({ 
     where: { user_id: userId } 
   });
 
-  const missingItems = recipe.recipe_ingredients.map((ri: any) => { 
+  const missingItems = recipe.recipe_ingredients.map((ri: any) => {
     const userInv = userInventory.find((inv: any) => inv.ingredient_id === ri.ingredient_id);
     const has = userInv ? Number(userInv.current_quantity) : 0;
-    const MathRequired = Number(ri.required_quantity);
+    const needed = Number(ri.required_quantity);
     
+    if (needed <= 0) return null;
+
     return {
       ingredient_id: ri.ingredient_id,
-      missing: MathRequired - has,
+      missing: needed - has,
       price: Number(ri.ingredients.unit_price)
     };
-  }).filter((item: any) => item.missing > 0);
+  }).filter((item: any) => item !== null && item.missing > 0);
 
   if (missingItems.length === 0) throw new Error('¡Ya tienes todo para esta receta!');
 
-  return await prisma.shopping_lists.create({ 
+  return await prisma.shopping_lists.create({
     data: {
       user_id: userId,
       name: `Faltantes para: ${recipe.title}`,
-      shopping_list_items: { 
-        create: missingItems.map((item: any) => ({ 
+      shopping_list_items: {
+        create: missingItems.map((item: any) => ({
           ingredient_id: item.ingredient_id,
-          target_quantity: item.missing,
-          total_price: item.missing * item.price
+          target_quantity: Math.max(0, item.missing),
+          total_price: Math.max(0, item.missing * item.price)
         }))
       }
     },
