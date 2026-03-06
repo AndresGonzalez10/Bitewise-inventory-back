@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model ingredients {
+  id                  Int                   @id @default(autoincrement())
+  author_id           String?               @db.Uuid
+  name                String                @unique @db.VarChar(100)
+  category            String                @db.VarChar(50)
+  unit_price          Decimal               @default(0) @db.Decimal(10, 4)
+  unit_default        String                @default("g") @db.VarChar(10)
+  users               users?                @relation(fields: [author_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  inventory           inventory[]
+  recipe_ingredients  recipe_ingredients[]
+  shopping_list_items shopping_list_items[]
+}
+
+model inventory {
+  id               Int          @id @default(autoincrement())
+  user_id          String?      @db.Uuid
+  ingredient_id    Int?
+  current_quantity Decimal      @default(0) @db.Decimal(10, 2)
+  updated_at       DateTime?    @default(now()) @db.Timestamp(6)
+  ingredients      ingredients? @relation(fields: [ingredient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users            users?       @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, ingredient_id])
+}
+
+model recipe_ingredients {
+  recipe_id         Int
+  ingredient_id     Int
+  required_quantity Decimal     @db.Decimal(10, 2)
+  ingredients       ingredients @relation(fields: [ingredient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  recipes           recipes     @relation(fields: [recipe_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([recipe_id, ingredient_id])
+}
+
+model recipes {
+  id                 Int                  @id @default(autoincrement())
+  title              String               @db.VarChar(200)
+  instructions       String
+  image_url          String?
+  is_custom          Boolean?             @default(false)
+  author_id          String?              @db.Uuid
+  created_at         DateTime?            @default(now()) @db.Timestamp(6)
+  recipe_ingredients recipe_ingredients[]
+  users              users?               @relation(fields: [author_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model shopping_list_items {
+  id              Int             @id @default(autoincrement())
+  list_id         Int?
+  ingredient_id   Int?
+  target_quantity Decimal         @db.Decimal(10, 2)
+  total_price     Decimal         @default(0) @db.Decimal(10, 2)
+  ingredients     ingredients?    @relation(fields: [ingredient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shopping_lists  shopping_lists? @relation(fields: [list_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model shopping_lists {
+  id                  Int                   @id @default(autoincrement())
+  user_id             String?               @db.Uuid
+  name                String                @db.VarChar(100)
+  created_at          DateTime?             @default(now()) @db.Timestamp(6)
+  shopping_list_items shopping_list_items[]
+  users               users?                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model users {
+  id             String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name           String           @db.VarChar(20)
+  email          String           @unique @db.VarChar(150)
+  password_hash  String
+  role           String?          @default("cliente") @db.VarChar(20)
+  created_at     DateTime?        @default(now()) @db.Timestamp(6)
+  ingredients    ingredients[]
+  inventory      inventory[]
+  recipes        recipes[]
+  shopping_lists shopping_lists[] 
+}
