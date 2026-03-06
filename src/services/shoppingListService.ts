@@ -8,37 +8,36 @@ export const generateListFromRecipeService = async (userId: string, recipeId: nu
     include: { recipe_ingredients: { include: { ingredients: true } } }
   });
 
-  if (!recipe) throw new Error('La receta solicitada no existe en nuestro catálogo.');
+  if (!recipe) throw new Error('Receta no encontrada.');
 
-  const userInventory = await prisma.inventory.findMany({ 
-    where: { user_id: userId } 
-  });
+  const userInventory = await prisma.inventory.findMany({ where: { user_id: userId } });
 
   const missingItems = recipe.recipe_ingredients.map((ri: any) => {
     const userInv = userInventory.find((inv: any) => inv.ingredient_id === ri.ingredient_id);
-    const has = userInv ? Number(userInv.current_quantity) : 0;
-    const needed = Number(ri.required_quantity);
-    
-    if (needed <= 0) return null;
+    const hasGrams = userInv ? Number(userInv.current_quantity) : 0;
+    const neededGrams = Number(ri.required_quantity);
+    const diffGrams = neededGrams - hasGrams;
+
+    if (diffGrams <= 0) return null;
+
+    const unitsToBuy = Math.ceil(diffGrams / Number(ri.ingredients.weight_per_unit));
 
     return {
       ingredient_id: ri.ingredient_id,
-      missing: needed - has,
-      price: Number(ri.ingredients.unit_price)
+      units: unitsToBuy,
+      total_price: unitsToBuy * (Number(ri.ingredients.unit_price) * Number(ri.ingredients.weight_per_unit))
     };
-  }).filter((item: any) => item !== null && item.missing > 0);
-
-  if (missingItems.length === 0) throw new Error('¡Ya tienes todo para esta receta!');
+  }).filter((item: any) => item !== null);
 
   return await prisma.shopping_lists.create({
     data: {
       user_id: userId,
-      name: `Faltantes para: ${recipe.title}`,
+      name: `Lista para: ${recipe.title}`,
       shopping_list_items: {
         create: missingItems.map((item: any) => ({
           ingredient_id: item.ingredient_id,
-          target_quantity: Math.max(0, item.missing),
-          total_price: Math.max(0, item.missing * item.price)
+          target_quantity: item.units, 
+          total_price: item.total_price
         }))
       }
     },

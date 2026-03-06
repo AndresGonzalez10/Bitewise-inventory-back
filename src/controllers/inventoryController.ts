@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getUserInventoryService, addIngredientToInventoryService } from '../services/inventoryService';
+import { getUserInventoryService, addIngredientToInventoryService,cookRecipeService } from '../services/inventoryService';
 
 export const getInventory = async (req: Request, res: Response): Promise<void> => {
   const { user_id } = req.params;
@@ -38,5 +38,22 @@ export const addToInventory = async (req: Request, res: Response): Promise<void>
   } catch (error) {
     console.error('Error al guardar en inventario:', error);
     res.status(500).json({ error: 'Error al procesar la solicitud' });
+  }
+};
+
+export const cookRecipe = async (req: Request, res: Response): Promise<void> => {
+  const { user_id, recipe_id } = req.body;
+
+  if (!user_id || !recipe_id) {
+    res.status(400).json({ error: "Faltan datos obligatorios (user_id, recipe_id)." });
+    return;
+  }
+
+  try {
+    const result = await cookRecipeService(user_id as string, Number(recipe_id));
+    res.json(result);
+  } catch (error: any) {
+    console.error("Error al cocinar:", error.message);
+    res.status(400).json({ error: error.message });
   }
 };
