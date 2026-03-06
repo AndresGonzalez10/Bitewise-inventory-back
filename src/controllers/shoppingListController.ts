@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { generateListFromRecipeService, getUserListsService } from '../services/shoppingListService';
+import { generateListFromRecipeService, getUserListsService, purchaseListService } from '../services/shoppingListService';
 
 export const generateFromRecipe = async (req: Request, res: Response): Promise<void> => {
   const { user_id, recipe_id } = req.body;
@@ -18,5 +18,22 @@ export const getMyLists = async (req: Request, res: Response): Promise<void> => 
     res.json(lists);
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener listas' });
+  }
+};
+
+export const completePurchase = async (req: Request, res: Response): Promise<void> => {
+  const { list_id, user_id } = req.body;
+
+  if (!list_id || !user_id) {
+    res.status(400).json({ error: 'Faltan datos: list_id y user_id son obligatorios.' });
+    return;
+  }
+
+  try {
+    const result = await purchaseListService(Number(list_id), user_id as string);
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error al procesar la compra:', error.message);
+    res.status(400).json({ error: error.message });
   }
 };

@@ -55,3 +55,38 @@ export const getUserListsService = async (userId: string) => {
     orderBy: { created_at: 'desc' }
   });
 };
+export const purchaseListService = async (listId: number, userId: string) => {
+  return await prisma.$transaction(async (tx) => {
+    const items = await tx.shopping_list_items.findMany({
+      where: { list_id: listId }
+    });
+
+    if (items.length === 0) {
+      throw new Error('La lista está vacía o no existe.');
+    }
+
+    for (const item of items) {
+      await tx.inventory.upsert({
+        where: {
+          user_id_ingredient_id: {
+            user_id: userId,
+            ingredient_id: item.ingredient_id as number
+          }
+        },
+        update: {
+          current_quantity: { increment: item.target_quantity }
+        },
+        create: {
+          user_id: userId,
+          ingredient_id: item.ingredient_id as number,
+          current_quantity: item.target_quantity
+        }
+      });
+    }
+
+    return { 
+      message: '¡Compra procesada! Los ingredientes ya están en tu inventario.',
+      items_processed: items.length 
+    };
+  });
+};
