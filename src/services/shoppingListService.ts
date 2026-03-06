@@ -57,20 +57,30 @@ export const getUserListsService = async (userId: string) => {
 };
 export const purchaseListService = async (listId: number, userId: string) => {
   return await prisma.$transaction(async (tx) => {
-    const items = await tx.shopping_list_items.findMany({
-      where: { list_id: listId }
+    const list = await tx.shopping_lists.findFirst({
+      where: { 
+        id: listId,
+        user_id: userId 
+      },
+      include: { shopping_list_items: true }
     });
 
-    if (items.length === 0) {
-      throw new Error('La lista está vacía o no existe.');
+    if (!list) {
+      throw new Error('La lista no existe o no tienes permiso para acceder a ella.');
     }
 
-    for (const item of items) {
+    if (list.shopping_list_items.length === 0) {
+      throw new Error('Esta lista ya ha sido procesada o está vacía.');
+    }
+
+    for (const item of list.shopping_list_items) {
+      if (!item.ingredient_id) continue;
+
       await tx.inventory.upsert({
         where: {
           user_id_ingredient_id: {
             user_id: userId,
-            ingredient_id: item.ingredient_id as number
+            ingredient_id: item.ingredient_id
           }
         },
         update: {
@@ -78,15 +88,18 @@ export const purchaseListService = async (listId: number, userId: string) => {
         },
         create: {
           user_id: userId,
-          ingredient_id: item.ingredient_id as number,
+          ingredient_id: item.ingredient_id,
           current_quantity: item.target_quantity
         }
       });
     }
+    await tx.shopping_list_items.deleteMany({
+      where: { list_id: listId }
+    });
 
     return { 
-      message: '¡Compra procesada! Los ingredientes ya están en tu inventario.',
-      items_processed: items.length 
+      message: 'Compra exitosa. El inventario ha sido actualizado y la lista ha sido procesada.',
+      items_moved: list.shopping_list_items.length
     };
   });
 };

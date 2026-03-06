@@ -5,6 +5,9 @@ const prisma = new PrismaClient();
 export const getUserInventoryService = async (userId: string) => {
   return await prisma.inventory.findMany({
     where: { user_id: userId },
+    include: {
+      ingredients: true 
+    },
     orderBy: { updated_at: 'desc' }
   });
 };
