@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import inventoryRoutes from './routes/inventoryRoutes';
 
 dotenv.config();
 
@@ -9,6 +10,7 @@ const PORT = process.env.PORT || 3003;
 
 app.use(cors());
 app.use(express.json());
+app.use('/api/inventory', inventoryRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ message: '🧠 Servicio de Inventario (Módulo 3) operando al 100%' });
