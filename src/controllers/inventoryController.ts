@@ -1,59 +1,61 @@
-import { Request, Response } from 'express';
-import { getUserInventoryService, addIngredientToInventoryService,cookRecipeService } from '../services/inventoryService';
+import { Response } from 'express';
+import { AuthRequest } from '../middlewares/authMiddleware';
+import { getUserInventoryService, addIngredientToInventoryService, cookRecipeService, removeIngredientFromInventoryService } from '../services/inventoryService';
 
-export const getInventory = async (req: Request, res: Response): Promise<void> => {
-  const { user_id } = req.params;
-
-  if (!user_id) {
-    res.status(400).json({ error: 'Falta el ID del usuario.' });
-    return;
-  }
+export const getInventory = async (req: AuthRequest, res: Response): Promise<void> => {
+  const user_id = req.user?.userId;
+  if (!user_id) { res.status(401).json({ error: 'No autorizado. Debes iniciar sesión.' }); return; }
 
   try {
-    const inventory = await getUserInventoryService(user_id as string);1
-    res.json({
-      message: 'Refri obtenido exitosamente',
-      items: inventory
-    });
+    const inventory = await getUserInventoryService(user_id);
+    res.json({ message: 'Refri obtenido exitosamente', items: inventory });
   } catch (error) {
-    console.error('Error al obtener inventario:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 };
 
-export const addToInventory = async (req: Request, res: Response): Promise<void> => {
-  const { user_id, ingredient_id, quantity } = req.body;
+export const addToInventory = async (req: AuthRequest, res: Response): Promise<void> => {
+  const user_id = req.user?.userId;
+  const { ingredient_id, quantity } = req.body;
 
-  if (!user_id || !ingredient_id || !quantity) {
-    res.status(400).json({ error: 'Faltan datos obligatorios (user_id, ingredient_id, quantity).' });
-    return;
-  }
+  if (!user_id) { res.status(401).json({ error: 'No autorizado.' }); return; }
+  if (!ingredient_id || quantity === undefined) { res.status(400).json({ error: 'Faltan datos obligatorios.' }); return; }
 
   try {
-    const updatedItem = await addIngredientToInventoryService({ user_id, ingredient_id, quantity });
-    res.status(200).json({
-      message: 'Ingrediente guardado en el refri',
-      item: updatedItem
-    });
-  } catch (error) {
-    console.error('Error al guardar en inventario:', error);
-    res.status(500).json({ error: 'Error al procesar la solicitud' });
+    const updatedItem = await addIngredientToInventoryService({ user_id, ingredient_id, quantity_units: quantity });
+    res.status(200).json({ message: 'Ingrediente sumado al refri', item: updatedItem });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
   }
 };
 
-export const cookRecipe = async (req: Request, res: Response): Promise<void> => {
-  const { user_id, recipe_id } = req.body;
+// 👇 NUEVA FUNCIÓN
+export const removeFromInventory = async (req: AuthRequest, res: Response): Promise<void> => {
+  const user_id = req.user?.userId;
+  const { ingredient_id, quantity } = req.body;
 
-  if (!user_id || !recipe_id) {
-    res.status(400).json({ error: "Faltan datos obligatorios (user_id, recipe_id)." });
-    return;
-  }
+  if (!user_id) { res.status(401).json({ error: 'No autorizado.' }); return; }
+  if (!ingredient_id || quantity === undefined) { res.status(400).json({ error: 'Faltan datos obligatorios.' }); return; }
 
   try {
-    const result = await cookRecipeService(user_id as string, Number(recipe_id));
+    const updatedItem = await removeIngredientFromInventoryService({ user_id, ingredient_id, quantity_units: quantity });
+    res.status(200).json({ message: 'Ingrediente retirado del refri', item: updatedItem });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const cookRecipe = async (req: AuthRequest, res: Response): Promise<void> => {
+  const user_id = req.user?.userId;
+  const { recipe_id } = req.body;
+
+  if (!user_id) { res.status(401).json({ error: 'No autorizado.' }); return; }
+  if (!recipe_id) { res.status(400).json({ error: "Falta el ID de la receta." }); return; }
+
+  try {
+    const result = await cookRecipeService(user_id, Number(recipe_id));
     res.json(result);
   } catch (error: any) {
-    console.error("Error al cocinar:", error.message);
     res.status(400).json({ error: error.message });
   }
 };
