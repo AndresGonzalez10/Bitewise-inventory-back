@@ -18,6 +18,6 @@ app.get('/api/health', (req, res) => {
   res.json({ message: '🧠 Servicio de Inventario (Módulo 3) operando al 100%' });
 });
 
-app.listen(PORT, () => {
-  console.log(`🧊 Servicio de Inventario corriendo en http://localhost:${PORT}`);
+app.listen(PORT as number, '0.0.0.0', () => {
+  console.log(`Servidor corriendo en el puerto ${PORT}`);
 });
