@@ -1,10 +1,10 @@
-import express from 'express';
-import cors from 'cors';
 import dotenv from 'dotenv';
+dotenv.config();
+import cors from 'cors';
+import express from 'express';
 import inventoryRoutes from './routes/inventoryRoutes';
 import shoppingListRoutes from './routes/shoppingListRoutes';
 
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3003;
