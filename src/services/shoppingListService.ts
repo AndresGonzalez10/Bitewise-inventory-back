@@ -14,15 +14,16 @@ export const generateListFromRecipeService = async (userId: string, recipeId: nu
 
   const missingItems = recipe.recipe_ingredients.map((ri: any) => {
     const userInv = userInventory.find((inv: any) => inv.ingredient_id === ri.ingredient_id);
-    const hasGrams = userInv ? Number(userInv.current_quantity) : 0;
-    const neededGrams = Number(ri.required_quantity);
-    const diffGrams = neededGrams - hasGrams;
+    const hasQuantity = userInv ? Number(userInv.current_quantity) : 0;
+    const neededQuantity = Number(ri.required_quantity);
+    const diffQuantity = neededQuantity - hasQuantity;
 
-    if (diffGrams <= 0) return null;
+    if (diffQuantity <= 0) return null;
 
-    const unitsToBuy = Math.ceil(diffGrams / Number(ri.ingredients.weight_per_unit));
+    // NUEVA LÓGICA: Lo que falta es exactamente lo que se manda a comprar
+    const quantityToBuy = Math.ceil(diffQuantity);
 
-    return { ingredient_id: ri.ingredient_id, units: unitsToBuy };
+    return { ingredient_id: ri.ingredient_id, units: quantityToBuy };
   }).filter((item: any) => item !== null);
 
   if (missingItems.length === 0) throw new Error('¡Ya tienes todos los ingredientes en tu refri!');
@@ -67,15 +68,17 @@ export const purchaseListService = async (listId: number, userId: string) => {
     for (const item of list.shopping_list_items) {
       if (!item.ingredient_id || !item.ingredients) continue;
 
-      const gramsToAdd = Number(item.target_quantity) * Number(item.ingredients.weight_per_unit);
+      // NUEVA LÓGICA: La cantidad a agregar al inventario es directamente la que se compró
+      const quantityToAdd = Number(item.target_quantity);
       gastoInteligente += Number(item.total_price);
 
       await tx.inventory.upsert({
         where: { user_id_ingredient_id: { user_id: userId, ingredient_id: item.ingredient_id } },
-        update: { current_quantity: { increment: gramsToAdd } },
-        create: { user_id: userId, ingredient_id: item.ingredient_id, current_quantity: gramsToAdd }
+        update: { current_quantity: { increment: quantityToAdd } },
+        create: { user_id: userId, ingredient_id: item.ingredient_id, current_quantity: quantityToAdd }
       });
     }
+    
     await tx.purchase_history.create({
       data: {
         user_id: userId,
@@ -85,6 +88,7 @@ export const purchaseListService = async (listId: number, userId: string) => {
 
     await tx.shopping_list_items.deleteMany({ where: { list_id: listId } });
     await tx.shopping_lists.delete({ where: { id: listId } });
+    
     const gastoHabitual = Number(user.weekly_budget);
     let dineroAhorrado = gastoHabitual - gastoInteligente;
     let porcentajeAhorro = gastoHabitual > 0 ? (dineroAhorrado / gastoHabitual) * 100 : 0;
