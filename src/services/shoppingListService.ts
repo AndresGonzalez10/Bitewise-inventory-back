@@ -20,7 +20,6 @@ export const generateListFromRecipeService = async (userId: string, recipeId: nu
 
     if (diffQuantity <= 0) return null;
 
-    // NUEVA LÓGICA: Lo que falta es exactamente lo que se manda a comprar
     const quantityToBuy = Math.ceil(diffQuantity);
 
     return { ingredient_id: ri.ingredient_id, units: quantityToBuy };
@@ -45,7 +44,7 @@ export const generateListFromRecipeService = async (userId: string, recipeId: nu
 
 export const getUserListsService = async (userId: string) => {
   return await prisma.shopping_lists.findMany({ 
-    where: { user_id: userId },
+    where: { user_id: userId, status: 'pendiente' },
     include: { shopping_list_items: { include: { ingredients: true } } },
     orderBy: { created_at: 'desc' }
   });
@@ -58,9 +57,8 @@ export const purchaseListService = async (listId: number, userId: string) => {
       include: { shopping_list_items: { include: { ingredients: true } } }
     });
 
-    const user = await tx.users.findUnique({ where: { id: userId } });
-
-    if (!list || !user) throw new Error('Información no encontrada.');
+    if (!list) throw new Error('Información no encontrada.');
+    if (list.status !== 'pendiente') throw new Error('Esta lista ya fue procesada.');
     if (list.shopping_list_items.length === 0) throw new Error('Esta lista ya está vacía.');
 
     let gastoInteligente = 0;
@@ -68,7 +66,6 @@ export const purchaseListService = async (listId: number, userId: string) => {
     for (const item of list.shopping_list_items) {
       if (!item.ingredient_id || !item.ingredients) continue;
 
-      // NUEVA LÓGICA: La cantidad a agregar al inventario es directamente la que se compró
       const quantityToAdd = Number(item.target_quantity);
       gastoInteligente += Number(item.total_price);
 
@@ -86,21 +83,14 @@ export const purchaseListService = async (listId: number, userId: string) => {
       }
     });
 
-    await tx.shopping_list_items.deleteMany({ where: { list_id: listId } });
-    await tx.shopping_lists.delete({ where: { id: listId } });
+    await tx.shopping_lists.update({
+      where: { id: listId },
+      data: { status: 'comprada' }
+    });
     
-    const gastoHabitual = Number(user.weekly_budget);
-    let dineroAhorrado = gastoHabitual - gastoInteligente;
-    let porcentajeAhorro = gastoHabitual > 0 ? (dineroAhorrado / gastoHabitual) * 100 : 0;
-
     return { 
-      message: 'Compra exitosa. El ticket ha sido guardado en tu historial.',
-      reporte_hipotesis: {
-        gasto_habitual_declarado: gastoHabitual.toFixed(2),
-        gasto_con_bitewise: gastoInteligente.toFixed(2),
-        dinero_ahorrado: dineroAhorrado.toFixed(2),
-        porcentaje_de_ahorro: `${porcentajeAhorro.toFixed(1)}%`
-      }
+      message: 'Compra exitosa. El ticket ha sido guardado y tu refri está actualizado.',
+      costo_total: gastoInteligente
     };
   });
 };
@@ -138,5 +128,9 @@ export const removeItemFromListService = async (userId: string, listId: number, 
 export const deleteListService = async (userId: string, listId: number) => {
   const list = await prisma.shopping_lists.findUnique({ where: { id: listId } });
   if (!list || list.user_id !== userId) throw new Error("No tienes permiso.");
-  return await prisma.shopping_lists.delete({ where: { id: listId } });
+  
+  return await prisma.shopping_lists.update({ 
+    where: { id: listId },
+    data: { status: 'cancelada' }
+  });
 };
