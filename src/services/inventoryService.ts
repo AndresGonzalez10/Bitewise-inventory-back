@@ -17,12 +17,13 @@ export const addIngredientToInventoryService = async (data: any) => {
   const ingredient = await prisma.ingredients.findUnique({ where: { id: Number(ingredient_id) } });
   if (!ingredient) throw new Error('Ingrediente no existe.');
 
-  const gramsToAdd = Number(quantity_units) * Number(ingredient.weight_per_unit);
+  // NUEVA LÓGICA: Se guarda directamente la cantidad sin conversiones de peso
+  const amountToAdd = Number(quantity_units);
 
   return await prisma.inventory.upsert({
     where: { user_id_ingredient_id: { user_id, ingredient_id: Number(ingredient_id) } },
-    update: { current_quantity: { increment: gramsToAdd } },
-    create: { user_id, ingredient_id: Number(ingredient_id), current_quantity: gramsToAdd }
+    update: { current_quantity: { increment: amountToAdd } },
+    create: { user_id, ingredient_id: Number(ingredient_id), current_quantity: amountToAdd }
   });
 };
 
@@ -33,19 +34,20 @@ export const removeIngredientFromInventoryService = async (data: any) => {
   const ingredient = await prisma.ingredients.findUnique({ where: { id: Number(ingredient_id) } });
   if (!ingredient) throw new Error('Ingrediente no existe.');
 
-  const gramsToRemove = Number(quantity_units) * Number(ingredient.weight_per_unit);
+  // NUEVA LÓGICA: Se resta directamente la cantidad
+  const amountToRemove = Number(quantity_units);
 
   const invItem = await prisma.inventory.findUnique({
     where: { user_id_ingredient_id: { user_id, ingredient_id: Number(ingredient_id) } }
   });
 
-  if (!invItem || Number(invItem.current_quantity) < gramsToRemove) {
+  if (!invItem || Number(invItem.current_quantity) < amountToRemove) {
     throw new Error('No tienes suficiente cantidad en el refri para retirar.');
   }
 
   return await prisma.inventory.update({
     where: { id: invItem.id },
-    data: { current_quantity: { decrement: gramsToRemove } }
+    data: { current_quantity: { decrement: amountToRemove } }
   });
 };
 
