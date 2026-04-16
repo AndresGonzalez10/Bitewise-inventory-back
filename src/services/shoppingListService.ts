@@ -20,11 +20,9 @@ export const generateListFromRecipeService = async (userId: string, recipeId: nu
 
     if (diffQuantity <= 0) return null;
 
-    const quantityToBuy = Math.ceil(diffQuantity);
-
     return { 
       ingredient_id: ri.ingredient_id, 
-      target_quantity: quantityToBuy 
+      target_quantity: Math.ceil(diffQuantity)
     };
   }).filter((item): item is { ingredient_id: number; target_quantity: number } => item !== null);
 
@@ -35,16 +33,13 @@ export const generateListFromRecipeService = async (userId: string, recipeId: nu
       user_id: userId,
       name: `Lista para: ${recipe.title}`,
       status: 'pendiente',
-      shopping_list_items: {
-        create: missingItems
-      }
+      shopping_list_items: { create: missingItems }
     },
     include: { shopping_list_items: true }
   });
 };
 
 export const getUserListsService = async (userId: string) => {
-  // Mostramos el historial completo
   return await prisma.shopping_lists.findMany({ 
     where: { user_id: userId },
     include: { shopping_list_items: { include: { ingredients: true } } },
@@ -56,33 +51,48 @@ export const purchaseListService = async (listId: number, userId: string) => {
   return await prisma.$transaction(async (tx) => {
     const list = await tx.shopping_lists.findFirst({
       where: { id: listId, user_id: userId },
-      include: { shopping_list_items: { include: { ingredients: true } } }
+      include: { shopping_list_items: true } // Sin include de ingredients, lo buscamos por separado
     });
 
-    if (!list) throw new Error('Información no encontrada.');
-    if (list.status !== 'pendiente' && list.status !== null) throw new Error('Esta lista ya fue procesada.');
-    if (list.shopping_list_items.length === 0) throw new Error('Esta lista ya está vacía.');
+    if (!list) throw new Error('Lista no encontrada.');
+    if (list.status === 'comprada') throw new Error('Esta lista ya fue comprada.');
+    if (list.status === 'cancelada') throw new Error('Esta lista fue cancelada.');
+    if (list.shopping_list_items.length === 0) throw new Error('La lista está vacía.');
 
-    let gastoInteligente = 0;
+    let gastoTotal = 0;
 
     for (const item of list.shopping_list_items) {
-      if (!item.ingredient_id || !item.ingredients) continue;
+      if (!item.ingredient_id) continue;
 
       const quantityToAdd = Number(item.target_quantity);
-      gastoInteligente += Number(item.total_price);
+      
+      // Buscamos el precio del ingrediente directamente
+      const ingredient = await tx.ingredients.findUnique({ 
+        where: { id: item.ingredient_id } 
+      });
+      
+      if (ingredient) {
+        gastoTotal += Number(ingredient.unit_price) * quantityToAdd;
+      }
 
       await tx.inventory.upsert({
-        where: { user_id_ingredient_id: { user_id: userId, ingredient_id: item.ingredient_id } },
+        where: { 
+          user_id_ingredient_id: { 
+            user_id: userId, 
+            ingredient_id: item.ingredient_id 
+          } 
+        },
         update: { current_quantity: { increment: quantityToAdd } },
-        create: { user_id: userId, ingredient_id: item.ingredient_id, current_quantity: quantityToAdd }
+        create: { 
+          user_id: userId, 
+          ingredient_id: item.ingredient_id, 
+          current_quantity: quantityToAdd 
+        }
       });
     }
     
     await tx.purchase_history.create({
-      data: {
-        user_id: userId,
-        total_cost: gastoInteligente
-      }
+      data: { user_id: userId, total_cost: gastoTotal }
     });
 
     await tx.shopping_lists.update({
@@ -91,14 +101,16 @@ export const purchaseListService = async (listId: number, userId: string) => {
     });
     
     return { 
-      message: 'Compra exitosa. El ticket ha sido guardado y tu refri está actualizado.',
-      costo_total: gastoInteligente
+      message: 'Compra exitosa. Tu inventario ha sido actualizado.',
+      costo_total: gastoTotal
     };
   });
 };
 
 export const createManualListService = async (userId: string, name: string) => {
-  return await prisma.shopping_lists.create({ data: { user_id: userId, name, status: 'pendiente' } });
+  return await prisma.shopping_lists.create({ 
+    data: { user_id: userId, name, status: 'pendiente' } 
+  });
 };
 
 export const modifyItemInListService = async (userId: string, listId: number, ingredientId: number, quantity: number) => {
