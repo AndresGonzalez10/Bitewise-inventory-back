@@ -60,7 +60,7 @@ export const purchaseListService = async (listId: number, userId: string) => {
     });
 
     if (!list) throw new Error('Información no encontrada.');
-    if (list.status !== 'pendiente') throw new Error('Esta lista ya fue procesada.');
+    if (list.status !== 'pendiente' && list.status !== null) throw new Error('Esta lista ya fue procesada.');
     if (list.shopping_list_items.length === 0) throw new Error('Esta lista ya está vacía.');
 
     let gastoInteligente = 0;
