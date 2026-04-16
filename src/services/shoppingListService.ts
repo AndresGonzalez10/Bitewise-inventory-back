@@ -22,8 +22,11 @@ export const generateListFromRecipeService = async (userId: string, recipeId: nu
 
     const quantityToBuy = Math.ceil(diffQuantity);
 
-    return { ingredient_id: ri.ingredient_id, units: quantityToBuy };
-  }).filter((item: any) => item !== null);
+    return { 
+      ingredient_id: ri.ingredient_id, 
+      target_quantity: quantityToBuy 
+    };
+  }).filter((item): item is { ingredient_id: number; target_quantity: number } => item !== null);
 
   if (missingItems.length === 0) throw new Error('¡Ya tienes todos los ingredientes en tu refri!');
 
@@ -31,11 +34,9 @@ export const generateListFromRecipeService = async (userId: string, recipeId: nu
     data: {
       user_id: userId,
       name: `Lista para: ${recipe.title}`,
+      status: 'pendiente',
       shopping_list_items: {
-        create: missingItems.map((item: any) => ({
-          ingredient_id: item.ingredient_id,
-          target_quantity: item.units
-        }))
+        create: missingItems
       }
     },
     include: { shopping_list_items: true }
@@ -43,8 +44,9 @@ export const generateListFromRecipeService = async (userId: string, recipeId: nu
 };
 
 export const getUserListsService = async (userId: string) => {
+  // Mostramos el historial completo
   return await prisma.shopping_lists.findMany({ 
-    where: { user_id: userId, status: 'pendiente' },
+    where: { user_id: userId },
     include: { shopping_list_items: { include: { ingredients: true } } },
     orderBy: { created_at: 'desc' }
   });
@@ -96,7 +98,7 @@ export const purchaseListService = async (listId: number, userId: string) => {
 };
 
 export const createManualListService = async (userId: string, name: string) => {
-  return await prisma.shopping_lists.create({ data: { user_id: userId, name } });
+  return await prisma.shopping_lists.create({ data: { user_id: userId, name, status: 'pendiente' } });
 };
 
 export const modifyItemInListService = async (userId: string, listId: number, ingredientId: number, quantity: number) => {
